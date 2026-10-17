@@ -12,6 +12,7 @@
 
     <string name="open_in_browser">Open this address in a browser on another device on the same Wi‑Fi:</string>
     <string name="no_network">No Wi‑Fi / local network address found. Connect the phone to Wi‑Fi.</string>
+    <string name="tailscale_hint">From anywhere, over Tailscale:</string>
 
     <string name="settings">Settings</string>
     <string name="port">Port</string>

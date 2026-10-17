@@ -194,10 +194,16 @@ class MainActivity : AppCompatActivity() {
                 binding.url.visibility = View.VISIBLE
                 binding.url.text = getString(R.string.no_network)
             }
+            val remoteUrl = CameraService.tailscaleUrl(this)
+            binding.tailscaleHint.visibility = if (remoteUrl != null) View.VISIBLE else View.GONE
+            binding.tailscaleUrl.visibility = if (remoteUrl != null) View.VISIBLE else View.GONE
+            binding.tailscaleUrl.text = remoteUrl.orEmpty()
         } else {
             binding.status.text = getString(R.string.status_stopped)
             binding.urlHint.visibility = View.GONE
             binding.url.visibility = View.GONE
+            binding.tailscaleHint.visibility = View.GONE
+            binding.tailscaleUrl.visibility = View.GONE
             binding.preview.setImageDrawable(null)
         }
     }

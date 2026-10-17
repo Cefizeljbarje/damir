@@ -90,6 +90,8 @@ configuration, and press Run.
    if you want them.
 3. Tap **Start camera** and grant the camera (and microphone / notification)
    permissions. The screen shows the address, e.g. `http://192.168.1.20:8080`.
+   If the phone is connected to Tailscale, it also shows the Tailscale address
+   (e.g. `http://100.101.102.103:8080`) for watching from anywhere.
 
 **On the viewing phone (HomeCam Viewer):**
 1. Tap **Add camera**, enter the address shown by the camera phone (and the

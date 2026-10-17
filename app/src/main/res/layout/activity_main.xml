@@ -65,6 +65,27 @@
             android:visibility="gone"
             tools:text="http://192.168.1.20:8080" />
 
+        <TextView
+            android:id="@+id/tailscaleHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/tailscale_hint"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tailscaleUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/teal"
+            android:textIsSelectable="true"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            tools:text="http://100.101.102.103:8080" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

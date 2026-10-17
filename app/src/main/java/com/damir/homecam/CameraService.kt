@@ -430,5 +430,12 @@ class CameraService : LifecycleService() {
             val port = Settings(context).port
             return "http://$ip:$port"
         }
+
+        /** The address to watch from anywhere, when the phone is on Tailscale. */
+        fun tailscaleUrl(context: Context): String? {
+            val ip = NetworkUtils.tailscaleIpv4() ?: return null
+            val port = Settings(context).port
+            return "http://$ip:$port"
+        }
     }
 }
