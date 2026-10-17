@@ -1,0 +1,7 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.HomeCamViewer" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/indigo</item>
+        <item name="colorPrimaryContainer">@color/indigo_light</item>
+        <item name="android:statusBarColor" tools:targetApi="l">@color/indigo</item>
+    </style>
+</resources>

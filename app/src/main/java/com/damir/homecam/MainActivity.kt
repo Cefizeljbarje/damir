@@ -57,6 +57,17 @@ class MainActivity : AppCompatActivity() {
         binding.passField.setText(settings.password)
         binding.qualityField.setText(settings.jpegQuality.toString())
         binding.frontSwitch.isChecked = settings.useFrontCamera
+        binding.audioSwitch.isChecked = settings.audioEnabled
+        binding.motionSwitch.isChecked = settings.motionEnabled
+        binding.sensitivitySlider.value = settings.motionSensitivity.coerceIn(1, 100).toFloat()
+        binding.clipField.setText(settings.clipSeconds.toString())
+        binding.recordGroup.check(
+            when (settings.recordMode) {
+                Settings.RECORD_MOTION -> R.id.recordMotion
+                Settings.RECORD_CONTINUOUS -> R.id.recordContinuous
+                else -> R.id.recordOff
+            }
+        )
     }
 
     private fun persistSettings() {
@@ -65,6 +76,15 @@ class MainActivity : AppCompatActivity() {
         settings.password = binding.passField.text?.toString().orEmpty()
         settings.jpegQuality = binding.qualityField.text?.toString()?.toIntOrNull() ?: Settings.DEFAULT_QUALITY
         settings.useFrontCamera = binding.frontSwitch.isChecked
+        settings.audioEnabled = binding.audioSwitch.isChecked
+        settings.motionEnabled = binding.motionSwitch.isChecked
+        settings.motionSensitivity = binding.sensitivitySlider.value.toInt()
+        settings.clipSeconds = binding.clipField.text?.toString()?.toIntOrNull() ?: Settings.DEFAULT_CLIP_SECONDS
+        settings.recordMode = when (binding.recordGroup.checkedRadioButtonId) {
+            R.id.recordMotion -> Settings.RECORD_MOTION
+            R.id.recordContinuous -> Settings.RECORD_CONTINUOUS
+            else -> Settings.RECORD_OFF
+        }
         // Reflect any clamping back into the fields.
         bindSettingsToFields()
     }
@@ -73,6 +93,12 @@ class MainActivity : AppCompatActivity() {
         persistSettings()
         val needed = buildList {
             if (!hasCamera()) add(Manifest.permission.CAMERA)
+            if (binding.audioSwitch.isChecked &&
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                add(Manifest.permission.RECORD_AUDIO)
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED
@@ -132,6 +158,13 @@ class MainActivity : AppCompatActivity() {
         binding.passField.isEnabled = enabled
         binding.qualityField.isEnabled = enabled
         binding.frontSwitch.isEnabled = enabled
+        binding.audioSwitch.isEnabled = enabled
+        binding.motionSwitch.isEnabled = enabled
+        binding.sensitivitySlider.isEnabled = enabled
+        binding.clipField.isEnabled = enabled
+        binding.recordOff.isEnabled = enabled
+        binding.recordMotion.isEnabled = enabled
+        binding.recordContinuous.isEnabled = enabled
     }
 
     override fun onResume() {

@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">HomeCam Viewer</string>
+
+    <string name="no_cameras">No cameras yet.\nTap + to add one.</string>
+    <string name="add_camera">Add camera</string>
+    <string name="edit_camera">Edit camera</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+
+    <string name="name">Name</string>
+    <string name="address">Address (e.g. 192.168.1.20:8080)</string>
+    <string name="username">Username (optional)</string>
+    <string name="password">Password (optional)</string>
+
+    <string name="connecting">Connecting…</string>
+    <string name="connection_failed">Connection failed. Check the address, Wi‑Fi, and that the camera is running.</string>
+    <string name="audio_on">Audio: on</string>
+    <string name="audio_off">Audio: off</string>
+    <string name="recordings">Recordings</string>
+    <string name="invalid_address">Please enter a valid address.</string>
+</resources>

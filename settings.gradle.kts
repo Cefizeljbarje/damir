@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "HomeCam"
 include(":app")
+include(":viewer")

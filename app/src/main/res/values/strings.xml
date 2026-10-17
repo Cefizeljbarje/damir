@@ -24,4 +24,18 @@
     <string name="notif_channel_name">Camera running</string>
     <string name="notif_title">HomeCam is streaming</string>
     <string name="notif_stop">Stop</string>
+
+    <string name="notif_motion_channel">Motion alerts</string>
+    <string name="notif_motion_title">Motion detected</string>
+    <string name="notif_motion_text">HomeCam saw movement in the camera view.</string>
+
+    <string name="enable_audio">Stream microphone audio</string>
+    <string name="enable_motion">Detect motion</string>
+    <string name="motion_sensitivity">Motion sensitivity</string>
+    <string name="recording">Recording</string>
+    <string name="record_off">Off</string>
+    <string name="record_motion">On motion</string>
+    <string name="record_continuous">Continuous</string>
+    <string name="clip_length">Clip length (seconds)</string>
+    <string name="recordings_link">Recorded clips are at &lt;address&gt;/recordings</string>
 </resources>

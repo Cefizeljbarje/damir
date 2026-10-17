@@ -1,58 +1,81 @@
 # HomeCam
 
-Turn an old Android phone into a **home monitoring / security camera**. The
-phone captures video and serves a live MJPEG stream over your local Wi‑Fi, so
-you can watch it from a browser on another phone, tablet, or computer — no
+Turn an old Android phone into a **home monitoring / security camera**, and
+watch it from a second phone with a companion viewer app. The camera phone
+captures video (and optional audio) and serves it over your local Wi‑Fi — no
 cloud account, no third‑party server, nothing leaves your network.
 
-This is the same idea as apps like *IP Webcam* or *Alfred Camera*, built as a
-small, transparent, self‑hostable project.
+This repository contains **two apps**:
+
+| Module | App | Role |
+|--------|-----|------|
+| `:app` | **HomeCam** | Runs on the phone that acts as the camera. |
+| `:viewer` | **HomeCam Viewer** | Runs on the phone you watch from. |
+
+You don't strictly need the viewer — any web browser on the same network works
+too — but the viewer app adds a saved camera list, a full‑screen view, and
+live audio playback.
 
 > **Use it responsibly.** Point it at your own space (a room, a doorway, a pet,
 > a garage). Recording other people without their knowledge or consent may be
-> illegal where you live. Tell anyone who might be filmed. The app always shows
-> a persistent "camera is running" notification so it is never hidden.
+> illegal where you live. Tell anyone who might be filmed. The camera app always
+> shows a persistent "camera is running" notification so it is never hidden.
 
 ---
 
 ## Features
 
+### Camera app (`:app`)
 - 📹 Live video from the phone's front or back camera (CameraX).
-- 🌐 View in any browser on the same Wi‑Fi: `http://<phone-ip>:8080`
-  - `/` — simple viewer page
-  - `/video` — MJPEG stream (embeddable in Home Assistant, etc.)
-  - `/snapshot` — single JPEG
-  - `/healthz` — health check
-- 🔒 Optional username + password (HTTP Basic auth).
-- 🔔 Persistent foreground notification while streaming, with a **Stop** action.
+- 🏃 **Motion detection** with a push notification when movement is seen
+  (adjustable sensitivity, 30 s notification cooldown).
+- 💾 **Recording to the phone**: *off*, *on motion* (a clip while something
+  moves, plus a trailing buffer), or *continuous* (back‑to‑back segments).
+  Clips are saved as MP4 in the app's own storage and listed at `/recordings`.
+- 🔊 **Microphone audio** exposed on the live stream (`/audio.pcm`).
+- 🔒 Optional username + password (HTTP Basic auth) on every endpoint.
+- 🔔 Persistent foreground notification with a **Stop** action.
 - 🔋 Keeps running with the screen off (wake lock + Wi‑Fi lock).
-- ⚙️ Configurable port, camera, and JPEG quality.
-- 🚫 No internet upload, no analytics, no accounts. Everything stays on your LAN.
+- 🚫 No internet upload, no analytics, no accounts.
+
+### Viewer app (`:viewer`)
+- 📝 Save multiple cameras (name, address, optional credentials).
+- 🖥️ Full‑screen live view; screen stays awake while watching.
+- 🔊 One‑tap live audio.
+- 📂 Opens the camera's recordings list in a browser.
+
+### HTTP endpoints (served by the camera)
+| Path | What |
+|------|------|
+| `/` | HTML viewer page |
+| `/video` | MJPEG stream (`multipart/x-mixed-replace`) |
+| `/snapshot` | single current JPEG |
+| `/audio.pcm` | raw 16 kHz mono s16le PCM (used by the viewer app) |
+| `/recordings` | HTML index of recorded clips |
+| `/recordings/<file>` | download a clip |
+| `/healthz` | health check |
 
 ## Requirements
 
-- Android 7.0 (API 24) or newer.
-- The viewing device must be on the **same Wi‑Fi / local network**.
+- Android 7.0 (API 24) or newer, on both phones.
+- Both devices on the **same Wi‑Fi / local network**.
 
 ## Build & install
 
-You need Android Studio (or the Android SDK command‑line tools). Then:
+You need Android Studio (or the Android SDK command‑line tools).
 
 ```bash
-# from the project root
-./gradlew assembleDebug
-# APK is written to app/build/outputs/apk/debug/app-debug.apk
+# camera app
+./gradlew :app:assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:installDebug
+
+# viewer app
+./gradlew :viewer:assembleDebug     # viewer/build/outputs/apk/debug/viewer-debug.apk
+./gradlew :viewer:installDebug
 ```
 
-Install on a connected phone:
-
-```bash
-./gradlew installDebug
-# or
-adb install app/build/outputs/apk/debug/app-debug.apk
-```
-
-Or just open the project in **Android Studio** and press Run.
+Or open the project in **Android Studio**, pick the `app` or `viewer` run
+configuration, and press Run.
 
 > The Gradle wrapper is included, so you don't need a local Gradle install — but
 > you do need the Android SDK. Android Studio sets `sdk.dir` in `local.properties`
@@ -61,58 +84,101 @@ Or just open the project in **Android Studio** and press Run.
 
 ## How to use
 
-1. Install and open **HomeCam** on the phone that will be the camera.
-2. (Optional) set a username and password, and choose the port / camera.
-3. Tap **Start camera** and grant the camera + notification permissions.
-4. The screen shows the address, e.g. `http://192.168.1.20:8080`.
-5. On another device on the same Wi‑Fi, open that address in a browser.
-6. Tap **Stop camera** (or the notification's **Stop**) when done.
+**On the camera phone (HomeCam):**
+1. Open the app, choose camera / port, optionally set a username + password.
+2. Turn on *Stream microphone audio*, *Detect motion*, and a *Recording* mode
+   if you want them.
+3. Tap **Start camera** and grant the camera (and microphone / notification)
+   permissions. The screen shows the address, e.g. `http://192.168.1.20:8080`.
+
+**On the viewing phone (HomeCam Viewer):**
+1. Tap **Add camera**, enter the address shown by the camera phone (and the
+   same credentials, if you set any).
+2. Tap the camera to watch it full‑screen; tap **Audio** to listen.
+
+Or, from any browser on the same Wi‑Fi, just open the address.
 
 ### Tips
+- Keep the camera phone **plugged into power** — streaming drains the battery.
+- For 24/7 use, disable battery optimization for HomeCam.
+- To reach it from outside your home, don't expose the port to the internet —
+  use a VPN into your home network (e.g. WireGuard / Tailscale).
 
-- Keep the phone **plugged into power** — streaming and the camera drain the
-  battery quickly.
-- For 24/7 use, disable battery optimization for HomeCam so Android doesn't kill
-  the service.
-- Mount the phone where you want to watch (a cheap phone holder works well).
-- To reach it from outside your home, don't expose the port directly — use a VPN
-  back into your home network (e.g. WireGuard / Tailscale). Exposing an
-  unauthenticated camera to the public internet is a bad idea.
+## Home Assistant integration
+
+The MJPEG stream works directly with Home Assistant's built‑in
+[`mjpeg` camera](https://www.home-assistant.io/integrations/mjpeg/). Add to
+`configuration.yaml`:
+
+```yaml
+camera:
+  - platform: mjpeg
+    name: HomeCam Hallway
+    mjpeg_url: http://192.168.1.20:8080/video
+    still_image_url: http://192.168.1.20:8080/snapshot
+    # only if you set credentials in the app:
+    username: youruser
+    password: yourpass
+    authentication: basic
+```
+
+That gives you the live view, snapshots, and HA's own motion/recording
+automations on top of the feed.
+
+### What about RTSP?
+
+HomeCam does **not** implement a native RTSP server. A correct RTSP/RTP + H.264
+server is a large, hardware‑specific piece of work, and MJPEG already covers the
+common integrations (Home Assistant, browsers, `ffmpeg`, most NVR software that
+accepts an MJPEG URL). If you specifically need RTSP later, the cleanest path is
+to add a maintained streaming library (e.g. pedroSG94's *RootEncoder*) as a
+separate capture pipeline — this is noted as a possible future enhancement.
 
 ## How it works
 
 ```
-CameraX ImageAnalysis (YUV_420_888)
-        │  (background thread, ~15 fps)
-        ▼
-YuvToJpeg  ──►  FrameBus (latest frame)  ──►  MjpegServer  ──►  browser / viewer
-                                          └►  on‑screen preview (ImageView)
-```
+CameraX ImageAnalysis (YUV_420_888)          CameraX VideoCapture
+   │  ~15 fps, background thread                 │  (bound only when recording)
+   ├─► MotionDetector (luma diff) ─► notification / trigger recording
+   ├─► YuvToJpeg ─► FrameBus ─► MjpegServer ─► /video, /snapshot, browser, viewer
+   └─────────────────────────────┘             └─► MP4 clips ─► /recordings
 
-- `CameraService` is a foreground service that owns the camera and the server.
-- `MjpegServer` is a tiny raw‑socket HTTP server (no networking dependency).
-- `FrameBus` hands the newest JPEG to every connected viewer.
+AudioRecord (mic) ─► AudioBus ─► MjpegServer ─► /audio.pcm ─► viewer AudioTrack
+```
 
 ## Project layout
 
 ```
-app/src/main/java/com/damir/homecam/
-├── MainActivity.kt    # UI: start/stop, settings, local preview
-├── CameraService.kt   # foreground service, CameraX, notification, locks
-├── MjpegServer.kt      # embedded HTTP/MJPEG server + Basic auth
-├── FrameBus.kt        # latest-frame hand-off between threads
-├── YuvToJpeg.kt       # YUV_420_888 -> JPEG (+ rotation)
-├── NetworkUtils.kt    # local IP discovery
-└── Settings.kt        # SharedPreferences-backed settings
+app/    (camera)                         viewer/
+  MainActivity.kt   UI + preview            MainActivity.kt    camera list
+  CameraService.kt  camera/stream/record    AddCameraActivity  add / edit
+  MjpegServer.kt    HTTP + endpoints        ViewerActivity     full-screen view
+  MotionDetector.kt luma frame differencing MjpegReader.kt     JPEG frame parser
+  ClipRecorder.kt   MP4 clip recording      AudioPlayer.kt     PCM playback
+  AudioStreamer.kt  mic capture             CameraStore.kt     saved cameras
+  AudioBus.kt       PCM fan-out
+  YuvToJpeg.kt      YUV -> JPEG
+  FrameBus.kt       latest-frame hand-off
+  NetworkUtils.kt   local IP
+  Settings.kt       preferences
 ```
 
 ## Privacy
 
 HomeCam makes **no outbound internet connections**. It only listens on the LAN
-port you choose and serves frames to clients that connect to it. There is no
-telemetry and no cloud component. The only data stored is your settings
-(port, camera choice, quality, and the optional credentials you set), in the
-app's private SharedPreferences.
+port you choose and serves to clients that connect to it. There is no telemetry
+and no cloud component. Recordings stay in the camera app's private storage on
+the phone. The only settings stored are your preferences and the optional
+credentials you set.
+
+## Notes & limitations
+
+- Recorded clips are **video only** — the microphone is reserved for the live
+  audio stream to avoid capture contention. (Audio‑in‑clips can be added later.)
+- Recording needs the device to support the camera + record stream combination;
+  on devices that don't, the app automatically keeps the live stream and
+  disables recording.
+- Audio in the browser depends on the browser; the viewer app plays it reliably.
 
 ## License
 

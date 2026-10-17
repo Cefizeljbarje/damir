@@ -2,8 +2,10 @@ package com.damir.homecam
 
 import android.util.Base64
 import android.util.Log
-import java.io.BufferedReader
 import java.io.BufferedOutputStream
+import java.io.BufferedReader
+import java.io.File
+import java.io.FileInputStream
 import java.io.InputStreamReader
 import java.io.OutputStream
 import java.net.InetSocketAddress
@@ -12,14 +14,19 @@ import java.net.Socket
 import java.net.SocketException
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 
 /**
  * A tiny HTTP server that serves the camera feed on the local network:
  *
- *   GET /           -> a minimal HTML viewer page
- *   GET /video      -> multipart/x-mixed-replace MJPEG stream
- *   GET /snapshot   -> a single current JPEG
- *   GET /healthz    -> "ok"
+ *   GET /                 -> a minimal HTML viewer page
+ *   GET /video            -> multipart/x-mixed-replace MJPEG stream
+ *   GET /snapshot         -> a single current JPEG
+ *   GET /audio.pcm        -> raw 16 kHz mono s16le PCM (for the viewer app)
+ *   GET /recordings       -> HTML index of recorded clips
+ *   GET /recordings/<f>   -> download a recorded .mp4 clip
+ *   GET /healthz          -> "ok"
  *
  * When a username and password are configured, every route requires HTTP Basic
  * auth. Implemented with raw sockets so the app needs no networking library.
@@ -27,7 +34,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 class MjpegServer(
     private val port: Int,
     private val username: String,
-    private val password: String
+    private val password: String,
+    private val recordingsDirProvider: () -> File? = { null }
 ) {
     @Volatile
     private var running = false
@@ -101,7 +109,6 @@ class MjpegServer(
             }
             val path = parts[1].substringBefore('?')
 
-            // Consume headers, capture Authorization.
             var authHeader: String? = null
             while (true) {
                 val line = reader.readLine() ?: break
@@ -116,11 +123,14 @@ class MjpegServer(
                 return
             }
 
-            when (path) {
-                "/" -> writeSimple(out, 200, "OK", "text/html; charset=utf-8", viewerHtml())
-                "/healthz" -> writeSimple(out, 200, "OK", "text/plain", "ok")
-                "/snapshot" -> writeSnapshot(out)
-                "/video" -> writeMjpeg(socket, out)
+            when {
+                path == "/" -> writeSimple(out, 200, "OK", "text/html; charset=utf-8", viewerHtml())
+                path == "/healthz" -> writeSimple(out, 200, "OK", "text/plain", "ok")
+                path == "/snapshot" -> writeSnapshot(out)
+                path == "/video" -> writeMjpeg(socket, out)
+                path == "/audio.pcm" -> writeAudio(socket, out)
+                path == "/recordings" || path == "/recordings/" -> writeRecordingsIndex(out)
+                path.startsWith("/recordings/") -> writeRecording(out, path.removePrefix("/recordings/"))
                 else -> writeSimple(out, 404, "Not Found", "text/plain", "not found")
             }
         } catch (_: Exception) {
@@ -160,6 +170,29 @@ class MjpegServer(
         }
     }
 
+    private fun writeAudio(socket: Socket, out: OutputStream) {
+        val header = buildString {
+            append("HTTP/1.0 200 OK\r\n")
+            append("Cache-Control: no-cache, no-store\r\n")
+            append("Connection: close\r\n")
+            append("Content-Type: audio/L16; rate=${AudioBus.SAMPLE_RATE}; channels=${AudioBus.CHANNELS}\r\n")
+            append("\r\n")
+        }
+        out.write(header.toByteArray(StandardCharsets.UTF_8))
+        out.flush()
+
+        val queue: LinkedBlockingQueue<ByteArray> = AudioBus.register()
+        try {
+            while (running && !socket.isClosed) {
+                val chunk = queue.poll(5, TimeUnit.SECONDS) ?: continue
+                out.write(chunk)
+                out.flush()
+            }
+        } finally {
+            AudioBus.unregister(queue)
+        }
+    }
+
     private fun writeSnapshot(out: OutputStream) {
         val frame = FrameBus.snapshot()
         if (frame == null) {
@@ -176,6 +209,64 @@ class MjpegServer(
         }
         out.write(header.toByteArray(StandardCharsets.UTF_8))
         out.write(frame.bytes)
+        out.flush()
+    }
+
+    private fun writeRecordingsIndex(out: OutputStream) {
+        val dir = recordingsDirProvider()
+        val files = dir?.listFiles { f -> f.isFile && f.name.endsWith(".mp4") }
+            ?.sortedByDescending { it.lastModified() }
+            ?: emptyList()
+        val rows = if (files.isEmpty()) {
+            "<p>No recordings yet.</p>"
+        } else {
+            files.joinToString("\n") { f ->
+                val sizeMb = f.length() / (1024.0 * 1024.0)
+                "<li><a href=\"/recordings/${f.name}\">${f.name}</a> " +
+                    "<span class=\"s\">(${"%.1f".format(sizeMb)} MB)</span></li>"
+            }.let { "<ul>$it</ul>" }
+        }
+        val html = """
+            <!doctype html><html lang="en"><head><meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>HomeCam recordings</title>
+            <style>:root{color-scheme:dark}body{font-family:system-ui,sans-serif;background:#111;color:#eee;margin:0;padding:16px}
+            a{color:#4db6ac}li{margin:6px 0}.s{opacity:.6;font-size:12px}</style></head>
+            <body><h2>Recordings</h2>$rows<p><a href="/">&larr; live view</a></p></body></html>
+        """.trimIndent()
+        writeSimple(out, 200, "OK", "text/html; charset=utf-8", html)
+    }
+
+    private fun writeRecording(out: OutputStream, rawName: String) {
+        val name = rawName.substringBefore('?')
+        // Reject path traversal; only serve plain file names.
+        if (name.isEmpty() || name.contains("/") || name.contains("\\") || name.contains("..")) {
+            writeSimple(out, 400, "Bad Request", "text/plain", "bad name")
+            return
+        }
+        val dir = recordingsDirProvider()
+        val file = dir?.let { File(it, name) }
+        if (file == null || !file.exists() || !file.isFile) {
+            writeSimple(out, 404, "Not Found", "text/plain", "not found")
+            return
+        }
+        val header = buildString {
+            append("HTTP/1.0 200 OK\r\n")
+            append("Content-Type: video/mp4\r\n")
+            append("Content-Length: ${file.length()}\r\n")
+            append("Content-Disposition: attachment; filename=\"$name\"\r\n")
+            append("Connection: close\r\n")
+            append("\r\n")
+        }
+        out.write(header.toByteArray(StandardCharsets.UTF_8))
+        FileInputStream(file).use { input ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                out.write(buf, 0, n)
+            }
+        }
         out.flush()
     }
 
@@ -221,6 +312,8 @@ class MjpegServer(
                    display:flex; flex-direction:column; align-items:center; }
             header { padding:12px; font-size:18px; font-weight:600; }
             img { max-width:100%; height:auto; background:#000; }
+            nav { padding:10px; font-size:14px; }
+            nav a { color:#4db6ac; margin:0 8px; }
             footer { padding:10px; font-size:12px; opacity:.6; }
           </style>
         </head>
@@ -228,7 +321,8 @@ class MjpegServer(
           <header>HomeCam &middot; live</header>
           <img src="/video" alt="live stream"
                onerror="this.onerror=null;this.src='/snapshot';">
-          <footer>Streaming over your local network</footer>
+          <nav><a href="/recordings">Recordings</a><a href="/snapshot">Snapshot</a></nav>
+          <footer>Streaming over your local network &middot; audio at /audio.pcm</footer>
         </body>
         </html>
     """.trimIndent()
