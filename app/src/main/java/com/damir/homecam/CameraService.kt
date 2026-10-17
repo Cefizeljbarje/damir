@@ -55,22 +55,34 @@ class CameraService : LifecycleService() {
     private var lastFrameMs = 0L
     private val minFrameIntervalMs = 66L // cap at ~15 fps
     private var lastMotionNotifyMs = 0L
+    private var started = false
 
     override fun onCreate() {
         super.onCreate()
         settings = Settings(this)
         cameraExecutor = Executors.newSingleThreadExecutor()
-        createNotificationChannels()
+        ensureChannels(this)
         acquireLocks()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
 
-        if (intent?.action == ACTION_STOP) {
-            stopSelf()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_REFRESH -> if (!started) {
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
+
+        // Started without a visible activity (after a reboot, an app update, or a
+        // restart by the system): Android does not allow the microphone then, so
+        // audio waits until the app is opened.
+        val background = intent == null || intent.getBooleanExtra(EXTRA_BACKGROUND, false)
 
         if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED
@@ -80,12 +92,21 @@ class CameraService : LifecycleService() {
             return START_NOT_STICKY
         }
 
-        startForegroundWithNotification()
+        if (!enterForeground(allowMic = !background)) {
+            if (started) return START_STICKY // keep the running camera as it is
+            notifyStartFailed(this)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        if (!background) startAudioIfEnabled()
+        if (started) return START_STICKY
+
+        started = true
+        isRunning = true
         startServer()
         startCamera()
-        startAudioIfEnabled()
         startTicks()
-        isRunning = true
         return START_STICKY
     }
 
@@ -206,13 +227,12 @@ class CameraService : LifecycleService() {
         }
     }
 
+    private fun micAllowed(): Boolean = settings.audioEnabled &&
+        ActivityCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) ==
+        PackageManager.PERMISSION_GRANTED
+
     private fun startAudioIfEnabled() {
-        val granted = ActivityCompat.checkSelfPermission(
-            this, android.Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-        if (settings.audioEnabled && granted) {
-            audioStreamer.start()
-        }
+        if (micAllowed()) audioStreamer.start()
     }
 
     private fun startTicks() {
@@ -227,19 +247,23 @@ class CameraService : LifecycleService() {
         }, 1000)
     }
 
-    private fun startForegroundWithNotification() {
+    /** Returns false when Android refuses to run the camera in the foreground right now. */
+    private fun enterForeground(allowMic: Boolean): Boolean {
         val notification = buildNotification(getString(R.string.notif_title), streamUrl(this))
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-            val micGranted = ActivityCompat.checkSelfPermission(
-                this, android.Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-            if (settings.audioEnabled && micGranted) {
-                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                if (allowMic && micAllowed()) {
+                    type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                }
+                ServiceCompat.startForeground(this, NOTIF_ID, notification, type)
+            } else {
+                startForeground(NOTIF_ID, notification)
             }
-            ServiceCompat.startForeground(this, NOTIF_ID, notification, type)
-        } else {
-            startForeground(NOTIF_ID, notification)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "could not enter the foreground", e)
+            false
         }
     }
 
@@ -280,24 +304,6 @@ class CameraService : LifecycleService() {
             .setCategory(NotificationCompat.CATEGORY_EVENT)
             .build()
         getSystemService(NotificationManager::class.java).notify(NOTIF_MOTION_ID, notification)
-    }
-
-    private fun createNotificationChannels() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(NotificationManager::class.java)
-            val running = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.notif_channel_name),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply { setShowBadge(false) }
-            val motion = NotificationChannel(
-                CHANNEL_MOTION_ID,
-                getString(R.string.notif_motion_channel),
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            manager.createNotificationChannel(running)
-            manager.createNotificationChannel(motion)
-        }
     }
 
     private fun acquireLocks() {
@@ -341,10 +347,14 @@ class CameraService : LifecycleService() {
         private const val TAG = "CameraService"
         private const val CHANNEL_ID = "homecam_camera"
         private const val CHANNEL_MOTION_ID = "homecam_motion"
+        private const val CHANNEL_ALERT_ID = "homecam_alerts"
         private const val NOTIF_ID = 1001
         private const val NOTIF_MOTION_ID = 1002
+        private const val NOTIF_ALERT_ID = 1003
         private const val MOTION_NOTIFY_COOLDOWN_MS = 30_000L
+        private const val EXTRA_BACKGROUND = "background"
         const val ACTION_STOP = "com.damir.homecam.action.STOP"
+        const val ACTION_REFRESH = "com.damir.homecam.action.REFRESH"
 
         @Volatile
         var isRunning = false
@@ -354,8 +364,65 @@ class CameraService : LifecycleService() {
             ContextCompat.startForegroundService(context, Intent(context, CameraService::class.java))
         }
 
+        /** Start from a broadcast receiver, with no visible activity. */
+        fun startInBackground(context: Context) {
+            val intent = Intent(context, CameraService::class.java).putExtra(EXTRA_BACKGROUND, true)
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        /** Lets a running service turn on audio now that the app is visible. */
+        fun refresh(context: Context) {
+            context.startService(Intent(context, CameraService::class.java).setAction(ACTION_REFRESH))
+        }
+
         fun stop(context: Context) {
             context.startService(Intent(context, CameraService::class.java).setAction(ACTION_STOP))
+        }
+
+        fun ensureChannels(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    context.getString(R.string.notif_channel_name),
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply { setShowBadge(false) }
+            )
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_MOTION_ID,
+                    context.getString(R.string.notif_motion_channel),
+                    NotificationManager.IMPORTANCE_DEFAULT
+                )
+            )
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ALERT_ID,
+                    context.getString(R.string.notif_alert_channel),
+                    NotificationManager.IMPORTANCE_DEFAULT
+                )
+            )
+        }
+
+        /** Tells the user an automatic start was blocked; tapping it starts the camera. */
+        fun notifyStartFailed(context: Context) {
+            ensureChannels(context)
+            val open = PendingIntent.getActivity(
+                context, 2,
+                Intent(context, MainActivity::class.java)
+                    .putExtra(MainActivity.EXTRA_START, true)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val notification = NotificationCompat.Builder(context, CHANNEL_ALERT_ID)
+                .setContentTitle(context.getString(R.string.notif_start_failed_title))
+                .setContentText(context.getString(R.string.notif_start_failed_text))
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .build()
+            context.getSystemService(NotificationManager::class.java).notify(NOTIF_ALERT_ID, notification)
         }
 
         fun streamUrl(context: Context): String? {

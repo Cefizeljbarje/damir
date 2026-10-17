@@ -1,12 +1,16 @@
 package com.damir.homecam
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,6 +53,51 @@ class MainActivity : AppCompatActivity() {
             CameraService.stop(this)
             ui.postDelayed({ updateUi() }, 300)
         }
+
+        // Takes effect immediately, even while the camera is running.
+        binding.alwaysOnSwitch.setOnClickListener {
+            settings.autoStart = binding.alwaysOnSwitch.isChecked
+            if (settings.autoStart) requestBatteryExemption()
+        }
+        binding.batteryStatus.setOnClickListener { requestBatteryExemption() }
+        binding.vpnSettingsBtn.setOnClickListener {
+            runCatching { startActivity(Intent(android.provider.Settings.ACTION_VPN_SETTINGS)) }
+        }
+
+        if (savedInstanceState == null) handleStartIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleStartIntent(intent)
+    }
+
+    /** The "tap to start" notification after a blocked automatic start lands here. */
+    private fun handleStartIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_START, false) == true) {
+            intent.removeExtra(EXTRA_START)
+            onStartClicked()
+        }
+    }
+
+    @SuppressLint("BatteryLife") // a 24/7 camera is exactly the case this exemption is for
+    private fun requestBatteryExemption() {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+        val request = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            .setData(Uri.parse("package:$packageName"))
+        runCatching { startActivity(request) }.onFailure {
+            runCatching {
+                startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            }
+        }
+    }
+
+    private fun updateBatteryStatus() {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        val exempt = pm.isIgnoringBatteryOptimizations(packageName)
+        binding.batteryStatus.text = getString(if (exempt) R.string.battery_ok else R.string.battery_needed)
     }
 
     private fun bindSettingsToFields() {
@@ -57,6 +106,7 @@ class MainActivity : AppCompatActivity() {
         binding.passField.setText(settings.password)
         binding.qualityField.setText(settings.jpegQuality.toString())
         binding.frontSwitch.isChecked = settings.useFrontCamera
+        binding.alwaysOnSwitch.isChecked = settings.autoStart
         binding.audioSwitch.isChecked = settings.audioEnabled
         binding.motionSwitch.isChecked = settings.motionEnabled
         binding.sensitivitySlider.value = settings.motionSensitivity.coerceIn(1, 100).toFloat()
@@ -170,7 +220,11 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateUi()
+        updateBatteryStatus()
         startPreviewLoop()
+        // A camera started at boot runs without audio; now that the app is
+        // visible, Android allows the microphone.
+        if (CameraService.isRunning && settings.audioEnabled) CameraService.refresh(this)
     }
 
     override fun onPause() {
@@ -211,5 +265,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         ui.post(tick)
+    }
+
+    companion object {
+        const val EXTRA_START = "start"
     }
 }

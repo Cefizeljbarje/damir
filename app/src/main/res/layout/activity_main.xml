@@ -234,6 +234,29 @@
                 android:inputType="number" />
         </com.google.android.material.textfield.TextInputLayout>
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/alwaysOnSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/always_on" />
+
+        <TextView
+            android:id="@+id/batteryStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="?attr/selectableItemBackground"
+            android:padding="4dp"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/vpnSettingsBtn"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/vpn_settings" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

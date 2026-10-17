@@ -53,6 +53,11 @@ class Settings(context: Context) {
         get() = prefs.getInt(KEY_CLIP_SECS, DEFAULT_CLIP_SECONDS)
         set(value) = prefs.edit().putInt(KEY_CLIP_SECS, value.coerceIn(5, 600)).apply()
 
+    /** Start the camera automatically after a reboot or an app update. */
+    var autoStart: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_START, false)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_START, value).apply()
+
     val lensFacing: Int
         get() = if (useFrontCamera) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
 
@@ -84,5 +89,6 @@ class Settings(context: Context) {
         private const val KEY_MOTION_SENS = "motion_sens"
         private const val KEY_RECORD = "record_mode"
         private const val KEY_CLIP_SECS = "clip_secs"
+        private const val KEY_AUTO_START = "auto_start"
     }
 }

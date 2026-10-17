@@ -38,4 +38,12 @@
     <string name="record_continuous">Continuous</string>
     <string name="clip_length">Clip length (seconds)</string>
     <string name="recordings_link">Recorded clips are at &lt;address&gt;/recordings</string>
+
+    <string name="always_on">Always on (start automatically after a reboot)</string>
+    <string name="battery_ok">Battery optimization is off for HomeCam.</string>
+    <string name="battery_needed">Battery optimization is on — Android may stop HomeCam. Tap to turn it off.</string>
+    <string name="vpn_settings">Open VPN settings (Tailscale Always-on VPN)</string>
+    <string name="notif_alert_channel">Camera status</string>
+    <string name="notif_start_failed_title">HomeCam did not start</string>
+    <string name="notif_start_failed_text">Android blocked the automatic start. Tap to start the camera.</string>
 </resources>

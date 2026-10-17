@@ -100,9 +100,42 @@ Or, from any browser on the same Wi‑Fi, just open the address.
 
 ### Tips
 - Keep the camera phone **plugged into power** — streaming drains the battery.
-- For 24/7 use, disable battery optimization for HomeCam.
+- For 24/7 use, see [Always on](#always-on-247) below.
 - To reach it from outside your home, don't expose the port to the internet —
   use a VPN into your home network (e.g. WireGuard / Tailscale).
+
+## Always on (24/7)
+
+Turn on **Always on** in the camera app. Then HomeCam:
+
+- starts the camera again by itself after a reboot (e.g. after a power cut)
+  and after an app update;
+- asks Android to exempt it from battery optimization (the status line under
+  the switch shows whether that is done — tap it to fix);
+- if Android still blocks an automatic start, shows a **"HomeCam did not
+  start"** notification — tap it to start the camera.
+
+For a phone that stays on as a camera, also:
+
+1. **Screen lock: None or Swipe.** With a PIN/pattern, Android does not run
+   apps after a reboot until someone unlocks the phone. (The trade‑off: anyone
+   holding the phone can use it.)
+2. **Tailscale Always‑on VPN** (for viewing from outside): tap *Open VPN
+   settings* in HomeCam → the gear next to Tailscale → turn on *Always‑on VPN*.
+   Only you can switch this on; apps are not allowed to.
+3. **Manufacturer battery savers**: some phones stop background apps on their
+   own (Xiaomi *Autostart*, Samsung *Never sleeping apps*, Huawei *App launch*).
+   Allow HomeCam (and Tailscale) there — see <https://dontkillmyapp.com>.
+4. **Battery health**: if the phone has a charging limit (e.g. Samsung
+   *Protect battery*, 85 %), turn it on — a phone charging 24/7 ages faster.
+
+The screen can stay **off**: the camera keeps running in the background.
+
+Android limits: after an automatic start, **audio stays off until the app is
+opened once** on the camera phone (Android does not let apps start the
+microphone in the background). Video, motion detection and recording work right
+away. Keep `targetSdk` at 34 — from 35 on, Android no longer lets the camera
+start at boot.
 
 ## Home Assistant integration
 

@@ -10,6 +10,8 @@ android {
     defaultConfig {
         applicationId = "com.damir.homecam"
         minSdk = 24
+        // Keep at 34: from targetSdk 35 Android forbids starting a camera
+        // foreground service on BOOT_COMPLETED, which "Always on" relies on.
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
