@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">HomeCam</string>
+
+    <string name="tagline">Turn this phone into a home monitoring camera</string>
+    <string name="consent_note">Use only to monitor your own space. Recording people without their knowledge may be illegal where you live — tell anyone who may be filmed.</string>
+
+    <string name="start">Start camera</string>
+    <string name="stop">Stop camera</string>
+
+    <string name="status_stopped">Stopped</string>
+    <string name="status_running">Streaming</string>
+
+    <string name="open_in_browser">Open this address in a browser on another device on the same Wi‑Fi:</string>
+    <string name="no_network">No Wi‑Fi / local network address found. Connect the phone to Wi‑Fi.</string>
+
+    <string name="settings">Settings</string>
+    <string name="port">Port</string>
+    <string name="username">Username (optional)</string>
+    <string name="password">Password (optional)</string>
+    <string name="use_front_camera">Use front camera</string>
+    <string name="quality">JPEG quality (10–100)</string>
+
+    <string name="perm_needed">Camera permission is required to stream.</string>
+    <string name="notif_channel_name">Camera running</string>
+    <string name="notif_title">HomeCam is streaming</string>
+    <string name="notif_stop">Stop</string>
+</resources>
