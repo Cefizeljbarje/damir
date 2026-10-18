@@ -12,6 +12,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
+import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.LinkedBlockingQueue
@@ -27,6 +28,9 @@ import java.util.concurrent.TimeUnit
  *   GET /recordings       -> HTML index of recorded clips
  *   GET /recordings/<f>   -> download a recorded .mp4 clip
  *   GET /healthz          -> "ok"
+ *   GET /api/status       -> camera state and settings (JSON)
+ *   POST /api/settings    -> change settings (form fields; needs "X-HomeCam: 1")
+ *   GET /api/events       -> motion events as Server-Sent Events
  *
  * When a username and password are configured, every route requires HTTP Basic
  * auth. Implemented with raw sockets so the app needs no networking library.
@@ -35,7 +39,8 @@ class MjpegServer(
     private val port: Int,
     private val username: String,
     private val password: String,
-    private val recordingsDirProvider: () -> File? = { null }
+    private val recordingsDirProvider: () -> File? = { null },
+    private val control: CameraControl? = null
 ) {
     @Volatile
     private var running = false
@@ -103,18 +108,24 @@ class MjpegServer(
 
             val requestLine = reader.readLine() ?: return
             val parts = requestLine.split(" ")
-            if (parts.size < 2 || parts[0] != "GET") {
+            if (parts.size < 2 || (parts[0] != "GET" && parts[0] != "POST")) {
                 writeSimple(out, 400, "Bad Request", "text/plain", "bad request")
                 return
             }
+            val method = parts[0]
             val path = parts[1].substringBefore('?')
 
             var authHeader: String? = null
+            var contentLength = 0
+            var homeCamHeader = false
             while (true) {
                 val line = reader.readLine() ?: break
                 if (line.isEmpty()) break
-                if (line.startsWith("Authorization:", ignoreCase = true)) {
-                    authHeader = line.substringAfter(':').trim()
+                val value = line.substringAfter(':').trim()
+                when {
+                    line.startsWith("Authorization:", ignoreCase = true) -> authHeader = value
+                    line.startsWith("Content-Length:", ignoreCase = true) -> contentLength = value.toIntOrNull() ?: 0
+                    line.startsWith("X-HomeCam:", ignoreCase = true) -> homeCamHeader = value == "1"
                 }
             }
 
@@ -123,7 +134,22 @@ class MjpegServer(
                 return
             }
 
+            if (method == "POST" || path == "/api/settings") {
+                if (method != "POST" || path != "/api/settings") {
+                    writeSimple(out, 405, "Method Not Allowed", "text/plain", "method not allowed")
+                } else if (!homeCamHeader) {
+                    // A plain HTML form on another site cannot set this header, so a
+                    // page open in the browser cannot change the camera's settings.
+                    writeSimple(out, 403, "Forbidden", "text/plain", "missing X-HomeCam header")
+                } else {
+                    writeSettings(out, readBody(reader, contentLength))
+                }
+                return
+            }
+
             when {
+                path == "/api/status" -> writeStatus(out)
+                path == "/api/events" -> writeEvents(socket, out)
                 path == "/" -> writeSimple(out, 200, "OK", "text/html; charset=utf-8", viewerHtml())
                 path == "/healthz" -> writeSimple(out, 200, "OK", "text/plain", "ok")
                 path == "/snapshot" -> writeSnapshot(out)
@@ -192,6 +218,70 @@ class MjpegServer(
             AudioBus.unregister(queue)
         }
     }
+
+    private fun writeStatus(out: OutputStream) {
+        val status = control?.statusJson()
+        if (status == null) {
+            writeSimple(out, 404, "Not Found", "text/plain", "not found")
+            return
+        }
+        writeSimple(out, 200, "OK", "application/json", status)
+    }
+
+    private fun writeSettings(out: OutputStream, body: String) {
+        val ctl = control
+        if (ctl == null) {
+            writeSimple(out, 404, "Not Found", "text/plain", "not found")
+            return
+        }
+        ctl.applySettings(parseForm(body))
+        writeSimple(out, 200, "OK", "application/json", ctl.statusJson())
+    }
+
+    /** Server-Sent Events: "motion" events, and a comment line as a heartbeat. */
+    private fun writeEvents(socket: Socket, out: OutputStream) {
+        val header = buildString {
+            append("HTTP/1.0 200 OK\r\n")
+            append("Content-Type: text/event-stream\r\n")
+            append("Cache-Control: no-cache\r\n")
+            append("Connection: close\r\n")
+            append("\r\n")
+        }
+        out.write(header.toByteArray(StandardCharsets.UTF_8))
+        out.write(": connected\n\n".toByteArray(StandardCharsets.UTF_8))
+        out.flush()
+
+        val queue = MotionEvents.register()
+        try {
+            while (running && !socket.isClosed) {
+                val time = queue.poll(EVENT_HEARTBEAT_SECONDS, TimeUnit.SECONDS)
+                val chunk = if (time == null) ": ping\n\n" else "event: motion\ndata: {\"time\":$time}\n\n"
+                out.write(chunk.toByteArray(StandardCharsets.UTF_8))
+                out.flush()
+            }
+        } finally {
+            MotionEvents.unregister(queue)
+        }
+    }
+
+    /** Form bodies are URL-encoded ASCII, so characters and bytes match. */
+    private fun readBody(reader: BufferedReader, length: Int): String {
+        val size = length.coerceIn(0, MAX_BODY_CHARS)
+        val buf = CharArray(size)
+        var read = 0
+        while (read < size) {
+            val n = reader.read(buf, read, size - read)
+            if (n < 0) break
+            read += n
+        }
+        return String(buf, 0, read)
+    }
+
+    private fun parseForm(body: String): Map<String, String> =
+        body.split('&').filter { it.isNotEmpty() }.associate { pair ->
+            URLDecoder.decode(pair.substringBefore('='), "UTF-8") to
+                URLDecoder.decode(pair.substringAfter('=', ""), "UTF-8")
+        }
 
     private fun writeSnapshot(out: OutputStream) {
         val frame = FrameBus.snapshot()
@@ -424,5 +514,7 @@ class MjpegServer(
     companion object {
         private const val TAG = "MjpegServer"
         private const val BOUNDARY = "homecamframe"
+        private const val EVENT_HEARTBEAT_SECONDS = 45L
+        private const val MAX_BODY_CHARS = 4096
     }
 }

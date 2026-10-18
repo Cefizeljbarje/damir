@@ -20,4 +20,51 @@
     <string name="audio_off">Audio: off</string>
     <string name="recordings">Recordings</string>
     <string name="invalid_address">Please enter a valid address.</string>
+
+    <string name="settings_short">Settings</string>
+    <string name="camera_settings">Camera settings</string>
+    <string name="camera_unreachable">Can\'t reach the camera. Is HomeCam running, and is this phone on the same Wi‑Fi or on Tailscale? (Camera settings need the latest HomeCam on the camera phone.)</string>
+
+    <string name="status_checking">checking…</string>
+    <string name="status_online">online</string>
+    <string name="status_offline">offline</string>
+    <string name="status_battery">battery %d%%</string>
+    <string name="status_charging">charging</string>
+    <string name="status_motion_on">motion on</string>
+    <string name="status_motion_off">motion off</string>
+    <string name="status_recording">recording</string>
+    <string name="status_alerts_on">alerts on</string>
+    <string name="status_last_motion">Last motion %s</string>
+    <string name="status_no_motion">No motion since the camera started</string>
+    <string name="status_sensor">Orientation sensor: %d°</string>
+    <string name="status_sensor_flat">Orientation sensor: lying flat</string>
+    <string name="status_sensor_none">Orientation sensor: no data — choose the rotation by hand</string>
+    <string name="status_no_recording">This phone can\'t record while it streams</string>
+
+    <string name="push_alerts">Motion alerts on this phone</string>
+    <string name="push_alerts_hint">A notification with a picture when the camera sees movement. Works on the home Wi‑Fi or over Tailscale.</string>
+    <string name="motion_detection">Motion detection</string>
+    <string name="motion_sensitivity">Motion sensitivity</string>
+    <string name="rotation">Picture rotation (clockwise)</string>
+    <string name="rotation_auto">Auto</string>
+    <string name="rotation_0">0°</string>
+    <string name="rotation_90">90°</string>
+    <string name="rotation_180">180°</string>
+    <string name="rotation_270">270°</string>
+    <string name="recording">Recording</string>
+    <string name="record_off">Off</string>
+    <string name="record_motion">On motion</string>
+    <string name="record_continuous">Continuous</string>
+    <string name="audio_note">Microphone audio is switched on in the camera app itself: Android lets only an app that is on screen start the microphone.</string>
+
+    <string name="motion_badge">● Motion</string>
+    <string name="motion_title">Motion: %s</string>
+    <string name="motion_text">Movement at %s. Tap to watch.</string>
+    <string name="watching_title">Motion alerts on</string>
+    <plurals name="watching_text">
+        <item quantity="one">Watching %d camera</item>
+        <item quantity="other">Watching %d cameras</item>
+    </plurals>
+    <string name="channel_watching">Motion alerts service</string>
+    <string name="channel_motion">Motion alerts</string>
 </resources>

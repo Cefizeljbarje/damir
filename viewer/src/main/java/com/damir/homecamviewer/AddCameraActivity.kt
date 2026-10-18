@@ -12,6 +12,7 @@ class AddCameraActivity : AppCompatActivity() {
     private lateinit var store: CameraStore
     private var index: Int = -1
     private var existingId: String? = null
+    private var existingNotify = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +25,7 @@ class AddCameraActivity : AppCompatActivity() {
             title = getString(R.string.edit_camera)
             store.get(index)?.let { cam ->
                 existingId = cam.id
+                existingNotify = cam.notify
                 binding.nameField.setText(cam.name)
                 binding.addressField.setText(cam.baseUrl)
                 binding.userField.setText(cam.username)
@@ -49,7 +51,8 @@ class AddCameraActivity : AppCompatActivity() {
             name = name,
             baseUrl = url,
             username = binding.userField.text?.toString()?.trim().orEmpty(),
-            password = binding.passField.text?.toString().orEmpty()
+            password = binding.passField.text?.toString().orEmpty(),
+            notify = existingNotify
         )
         if (index >= 0) store.update(index, camera) else store.add(camera)
         finish()

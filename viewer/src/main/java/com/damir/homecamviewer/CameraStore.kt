@@ -13,12 +13,18 @@ data class Camera(
     val name: String,
     val baseUrl: String,
     val username: String,
-    val password: String
+    val password: String,
+    /** Push a notification to this phone when the camera sees motion. */
+    val notify: Boolean = false
 ) {
+    val displayName get() = name.ifEmpty { baseUrl }
     val videoUrl get() = "$baseUrl/video"
     val snapshotUrl get() = "$baseUrl/snapshot"
     val audioUrl get() = "$baseUrl/audio.pcm"
     val recordingsUrl get() = "$baseUrl/recordings"
+    val statusUrl get() = "$baseUrl/api/status"
+    val settingsUrl get() = "$baseUrl/api/settings"
+    val eventsUrl get() = "$baseUrl/api/events"
 
     fun authHeader(): String? {
         if (username.isEmpty() || password.isEmpty()) return null
@@ -59,7 +65,8 @@ class CameraStore(context: Context) {
                     name = o.optString("name"),
                     baseUrl = o.optString("url"),
                     username = o.optString("user"),
-                    password = o.optString("pass")
+                    password = o.optString("pass"),
+                    notify = o.optBoolean("notify", false)
                 )
             )
         }
@@ -67,6 +74,18 @@ class CameraStore(context: Context) {
     }
 
     fun get(index: Int): Camera? = all().getOrNull(index)
+
+    fun byId(id: String): Camera? = all().firstOrNull { it.id == id }
+
+    /** Replaces the saved camera with the same id. */
+    fun update(camera: Camera) {
+        val list = all()
+        val index = list.indexOfFirst { it.id == camera.id }
+        if (index >= 0) {
+            list[index] = camera
+            persist(list)
+        }
+    }
 
     fun add(camera: Camera) {
         val list = all()
@@ -100,6 +119,7 @@ class CameraStore(context: Context) {
                     .put("url", c.baseUrl)
                     .put("user", c.username)
                     .put("pass", c.password)
+                    .put("notify", c.notify)
             )
         }
         prefs.edit().putString(KEY, arr.toString()).apply()

@@ -37,6 +37,8 @@ class ClipRecorder(private val context: Context) {
     private var lastMotionMs = 0L
     private var continuous = false
 
+    val isRecording: Boolean get() = recording != null
+
     val recordingsDir: File by lazy {
         val base = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir
         File(base, "clips").apply { if (!exists()) mkdirs() }

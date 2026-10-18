@@ -179,6 +179,58 @@
             android:layout_marginTop="12dp"
             android:text="@string/use_front_camera" />
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/rotation"
+            android:textSize="14sp" />
+
+        <RadioGroup
+            android:id="@+id/rotationGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rotAuto"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/rotation_auto" />
+
+            <RadioButton
+                android:id="@+id/rot0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/rotation_0" />
+
+            <RadioButton
+                android:id="@+id/rot90"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/rotation_90" />
+
+            <RadioButton
+                android:id="@+id/rot180"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/rotation_180" />
+
+            <RadioButton
+                android:id="@+id/rot270"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/rotation_270" />
+        </RadioGroup>
+
+        <TextView
+            android:id="@+id/sensorStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:alpha="0.7"
+            android:visibility="gone" />
+
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/audioSwitch"
             android:layout_width="match_parent"

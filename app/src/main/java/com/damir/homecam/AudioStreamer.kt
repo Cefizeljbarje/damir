@@ -17,6 +17,8 @@ class AudioStreamer {
     private var running = false
     private var thread: Thread? = null
 
+    val isActive: Boolean get() = running
+
     @SuppressLint("MissingPermission") // permission is checked by the caller
     fun start() {
         if (running) return

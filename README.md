@@ -27,10 +27,11 @@ live audio playback.
 
 ### Camera app (`:app`)
 - 📹 Live video from the phone's front or back camera (CameraX).
-- 🔄 Follows the phone's orientation (accelerometer): mount it upright or
-  sideways and the picture stays the right way up — even with screen
-  auto‑rotate off. A clip already recording keeps its orientation; the next
-  one uses the new one.
+- 🔄 **Picture rotation**: *Auto* follows the phone's orientation sensor
+  (works with screen auto‑rotate off), or fix it at 0°/90°/180°/270° — best
+  for a phone mounted in one place. The camera screen shows what the sensor
+  reports. A clip already recording keeps its orientation; the next one uses
+  the new one.
 - 🏃 **Motion detection** with a push notification when movement is seen
   (adjustable sensitivity, 30 s notification cooldown).
 - 💾 **Recording to the phone**: *off*, *on motion* (a clip while something
@@ -43,8 +44,16 @@ live audio playback.
 - 🚫 No internet upload, no analytics, no accounts.
 
 ### Viewer app (`:viewer`)
-- 📝 Save multiple cameras (name, address, optional credentials).
-- 🖥️ Full‑screen live view; screen stays awake while watching.
+- 📝 Save multiple cameras (name, address, optional credentials); the list
+  shows each one's state: online, battery and charging, motion on/off.
+- 🖥️ Full‑screen live view; screen stays awake while watching; a red
+  **● Motion** badge appears when the camera sees movement.
+- 🔔 **Motion alerts**: a notification with the current picture when a camera
+  sees movement — also with the screen off, after a reboot, and over
+  Tailscale. Tap it to watch.
+- ⚙️ **Camera settings from the viewer**: motion detection on/off,
+  sensitivity, picture rotation, recording mode — applied on the camera
+  right away.
 - 🔊 One‑tap live audio.
 - 📂 Opens the camera's recordings list in a browser.
 
@@ -58,6 +67,9 @@ live audio playback.
 | `/recordings` | HTML index of recorded clips |
 | `/recordings/<file>` | download a clip |
 | `/healthz` | health check |
+| `/api/status` | camera state and settings (JSON) |
+| `/api/settings` | `POST` form fields to change settings (`motionEnabled`, `motionSensitivity`, `rotation`, `recordMode`); needs the header `X-HomeCam: 1` |
+| `/api/events` | motion events as Server‑Sent Events (`event: motion`) |
 
 ## Requirements
 
@@ -165,6 +177,22 @@ microphone in the background). Video, motion detection and recording work right
 away. Keep `targetSdk` at 34 — from 35 on, Android no longer lets the camera
 start at boot.
 
+## Motion alerts on your phone
+
+In the viewer, long‑press a camera (or tap **Settings** while watching) and
+turn on **Motion alerts on this phone**. Allow notifications and let the app
+run in the background when asked.
+
+How it works: the viewer keeps one small connection open to each camera with
+alerts on (a "Watching N cameras" notification shows while it does). When the
+camera sees motion it sends an event; the viewer fetches the current picture
+and shows a notification. Nothing goes through a cloud service, so the viewer
+must be able to reach the camera: on the home Wi‑Fi, or anywhere with
+Tailscale on both phones. At most one alert per camera every 30 seconds.
+
+Camera settings and alerts need the current HomeCam on the camera phone; an
+older one shows up as offline in the viewer.
+
 ## Home Assistant integration
 
 The MJPEG stream works directly with Home Assistant's built‑in
@@ -211,16 +239,19 @@ AudioRecord (mic) ─► AudioBus ─► MjpegServer ─► /audio.pcm ─► vi
 
 ```
 app/    (camera)                         viewer/
-  MainActivity.kt   UI + preview            MainActivity.kt    camera list
-  CameraService.kt  camera/stream/record    AddCameraActivity  add / edit
-  MjpegServer.kt    HTTP + endpoints        ViewerActivity     full-screen view
-  MotionDetector.kt luma frame differencing MjpegReader.kt     JPEG frame parser
-  ClipRecorder.kt   MP4 clip recording      AudioPlayer.kt     PCM playback
-  AudioStreamer.kt  mic capture             CameraStore.kt     saved cameras
-  AudioBus.kt       PCM fan-out
-  YuvToJpeg.kt      YUV -> JPEG
-  FrameBus.kt       latest-frame hand-off
+  MainActivity.kt   UI + preview            MainActivity.kt     camera list + status
+  CameraService.kt  camera/stream/record    AddCameraActivity   add / edit
+  MjpegServer.kt    HTTP + endpoints        ViewerActivity      full-screen view
+  CameraControl.kt  API -> camera bridge    CameraControlActivity camera settings
+  MotionDetector.kt luma frame differencing AlertService.kt     motion alerts
+  MotionEvents.kt   motion event fan-out    EventWatcher.kt     /api/events client
+  ClipRecorder.kt   MP4 clip recording      CameraApi.kt        /api/status, /api/settings
+  AudioStreamer.kt  mic capture             MjpegReader.kt      JPEG frame parser
+  AudioBus.kt       PCM fan-out             AudioPlayer.kt      PCM playback
+  YuvToJpeg.kt      YUV -> JPEG             CameraStore.kt      saved cameras
+  FrameBus.kt       latest-frame hand-off   BootReceiver.kt     alerts after reboot
   NetworkUtils.kt   local IP
+  BootReceiver.kt   "Always on" restart
   Settings.kt       preferences
 ```
 
@@ -240,6 +271,10 @@ credentials you set.
   on devices that don't, the app automatically keeps the live stream and
   disables recording.
 - Audio in the browser depends on the browser; the viewer app plays it reliably.
+- Microphone audio can only be switched on in the camera app itself, not from
+  the viewer: Android lets only an app that is on screen start the microphone.
+- Changing the recording mode from the viewer briefly restarts the camera
+  (about a second without picture).
 
 ## License
 

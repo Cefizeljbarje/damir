@@ -19,6 +19,16 @@
     <string name="username">Username (optional)</string>
     <string name="password">Password (optional)</string>
     <string name="use_front_camera">Use front camera</string>
+    <string name="rotation">Picture rotation (clockwise) — Auto follows the phone</string>
+    <string name="rotation_auto">Auto</string>
+    <string name="rotation_0">0°</string>
+    <string name="rotation_90">90°</string>
+    <string name="rotation_180">180°</string>
+    <string name="rotation_270">270°</string>
+    <string name="sensor_status">Orientation sensor: %1$s · picture turned %2$d°</string>
+    <string name="sensor_no_data">no data — pick the rotation by hand</string>
+    <string name="sensor_flat">lying flat</string>
+    <string name="sensor_degrees">%d°</string>
     <string name="quality">JPEG quality (10–100)</string>
 
     <string name="perm_needed">Camera permission is required to stream.</string>

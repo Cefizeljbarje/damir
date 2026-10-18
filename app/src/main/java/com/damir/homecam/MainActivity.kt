@@ -51,7 +51,20 @@ class MainActivity : AppCompatActivity() {
         binding.startBtn.setOnClickListener { onStartClicked() }
         binding.stopBtn.setOnClickListener {
             CameraService.stop(this)
-            ui.postDelayed({ updateUi() }, 300)
+            // A viewer may have changed settings while the camera ran.
+            ui.postDelayed({ bindSettingsToFields(); updateUi() }, 300)
+        }
+
+        // Rotation applies live, also while the camera is running.
+        val rotationButtons = mapOf(
+            binding.rotAuto to Settings.ROTATION_AUTO,
+            binding.rot0 to 0,
+            binding.rot90 to 90,
+            binding.rot180 to 180,
+            binding.rot270 to 270
+        )
+        rotationButtons.forEach { (button, value) ->
+            button.setOnClickListener { settings.rotation = value }
         }
 
         // Takes effect immediately, even while the camera is running.
@@ -111,6 +124,15 @@ class MainActivity : AppCompatActivity() {
         binding.motionSwitch.isChecked = settings.motionEnabled
         binding.sensitivitySlider.value = settings.motionSensitivity.coerceIn(1, 100).toFloat()
         binding.clipField.setText(settings.clipSeconds.toString())
+        binding.rotationGroup.check(
+            when (settings.rotation) {
+                0 -> R.id.rot0
+                90 -> R.id.rot90
+                180 -> R.id.rot180
+                270 -> R.id.rot270
+                else -> R.id.rotAuto
+            }
+        )
         binding.recordGroup.check(
             when (settings.recordMode) {
                 Settings.RECORD_MOTION -> R.id.recordMotion
@@ -204,8 +226,21 @@ class MainActivity : AppCompatActivity() {
             binding.url.visibility = View.GONE
             binding.tailscaleHint.visibility = View.GONE
             binding.tailscaleUrl.visibility = View.GONE
+            binding.sensorStatus.visibility = View.GONE
             binding.preview.setImageDrawable(null)
         }
+    }
+
+    /** Shows what the orientation sensor reports, to tell a sensor problem from a wrong setting. */
+    private fun updateSensorStatus() {
+        val angle = CameraService.sensorOrientation
+        val sensor = when {
+            angle == CameraService.NO_SENSOR_DATA -> getString(R.string.sensor_no_data)
+            angle < 0 -> getString(R.string.sensor_flat)
+            else -> getString(R.string.sensor_degrees, angle)
+        }
+        binding.sensorStatus.text = getString(R.string.sensor_status, sensor, CameraService.appliedTurn)
+        binding.sensorStatus.visibility = View.VISIBLE
     }
 
     private fun setSettingsEnabled(enabled: Boolean) {
@@ -225,6 +260,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        bindSettingsToFields() // a viewer may have changed them remotely
         updateUi()
         updateBatteryStatus()
         startPreviewLoop()
@@ -252,6 +288,7 @@ class MainActivity : AppCompatActivity() {
             override fun run() {
                 if (!previewRunning) return
                 if (CameraService.isRunning) {
+                    updateSensorStatus()
                     val frame = FrameBus.snapshot()
                     if (frame != null && frame.seq != lastPreviewSeq) {
                         lastPreviewSeq = frame.seq

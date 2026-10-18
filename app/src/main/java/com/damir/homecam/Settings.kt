@@ -53,6 +53,15 @@ class Settings(context: Context) {
         get() = prefs.getInt(KEY_CLIP_SECS, DEFAULT_CLIP_SECONDS)
         set(value) = prefs.edit().putInt(KEY_CLIP_SECS, value.coerceIn(5, 600)).apply()
 
+    /**
+     * Extra clockwise turn of the picture: [ROTATION_AUTO] follows the
+     * orientation sensor, otherwise 0, 90, 180 or 270 degrees.
+     */
+    var rotation: Int
+        get() = prefs.getInt(KEY_ROTATION, ROTATION_AUTO)
+        set(value) = prefs.edit()
+            .putInt(KEY_ROTATION, if (value in MANUAL_ROTATIONS) value else ROTATION_AUTO).apply()
+
     /** Start the camera automatically after a reboot or an app update. */
     var autoStart: Boolean
         get() = prefs.getBoolean(KEY_AUTO_START, false)
@@ -77,6 +86,10 @@ class Settings(context: Context) {
         const val RECORD_OFF = "off"
         const val RECORD_MOTION = "motion"
         const val RECORD_CONTINUOUS = "continuous"
+        val RECORD_MODES = setOf(RECORD_OFF, RECORD_MOTION, RECORD_CONTINUOUS)
+
+        const val ROTATION_AUTO = -1
+        val MANUAL_ROTATIONS = setOf(0, 90, 180, 270)
 
         private const val PREFS = "homecam"
         private const val KEY_PORT = "port"
@@ -90,5 +103,6 @@ class Settings(context: Context) {
         private const val KEY_RECORD = "record_mode"
         private const val KEY_CLIP_SECS = "clip_secs"
         private const val KEY_AUTO_START = "auto_start"
+        private const val KEY_ROTATION = "rotation"
     }
 }
