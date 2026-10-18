@@ -311,7 +311,8 @@ class MjpegServer(
             body { margin:0; background:#111; color:#eee; font-family:system-ui,sans-serif;
                    display:flex; flex-direction:column; align-items:center; }
             header { padding:12px; font-size:18px; font-weight:600; }
-            img { max-width:100%; height:auto; background:#000; }
+            img { max-width:100%; max-height:85vh; background:#000; }
+            #status { padding:8px; font-size:14px; opacity:.7; }
             nav { padding:10px; font-size:14px; }
             nav a { color:#4db6ac; margin:0 8px; }
             footer { padding:10px; font-size:12px; opacity:.6; }
@@ -319,10 +320,103 @@ class MjpegServer(
         </head>
         <body>
           <header>HomeCam &middot; live</header>
-          <img src="/video" alt="live stream"
-               onerror="this.onerror=null;this.src='/snapshot';">
+          <img id="live" alt="live stream">
+          <noscript><img src="/video" alt="live stream"></noscript>
+          <div id="status">Connecting&hellip;</div>
           <nav><a href="/recordings">Recordings</a><a href="/snapshot">Snapshot</a></nav>
           <footer>Streaming over your local network &middot; audio at /audio.pcm</footer>
+          <script>
+          // The page reads the stream itself instead of <img src="/video">: that
+          // img froze on its last frame whenever the connection dropped (e.g. the
+          // camera restarted). Here every frame is its own image, and a dropped or
+          // stalled stream reconnects by itself.
+          (function () {
+            var img = document.getElementById('live');
+            var status = document.getElementById('status');
+            if (!window.fetch || !window.ReadableStream || !window.AbortController) {
+              img.src = '/video';
+              status.hidden = true;
+              return;
+            }
+
+            // Show one frame at a time; while one decodes, keep only the newest.
+            var shown = null, pending = null, busy = false;
+            function show(bytes) {
+              pending = bytes;
+              if (!busy) next();
+            }
+            function next() {
+              if (!pending) { busy = false; return; }
+              busy = true;
+              var url = URL.createObjectURL(new Blob([pending], { type: 'image/jpeg' }));
+              pending = null;
+              img.onload = img.onerror = function () {
+                if (shown) URL.revokeObjectURL(shown);
+                shown = url;
+                next();
+              };
+              img.src = url;
+            }
+
+            // Cuts the MJPEG stream into JPEGs at the FF D8 / FF D9 markers.
+            async function play() {
+              var abort = new AbortController();
+              var lastFrame = Date.now();
+              var watchdog = setInterval(function () {
+                if (Date.now() - lastFrame > 8000) abort.abort();
+              }, 1000);
+              try {
+                var res = await fetch('/video', { cache: 'no-store', signal: abort.signal });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                var reader = res.body.getReader();
+                var buf = new Uint8Array(0), start = -1, scan = 1;
+                for (;;) {
+                  var r = await reader.read();
+                  if (r.done) return;
+                  var joined = new Uint8Array(buf.length + r.value.length);
+                  joined.set(buf);
+                  joined.set(r.value, buf.length);
+                  buf = joined;
+                  var i = scan;
+                  while (i < buf.length) {
+                    if (buf[i - 1] === 0xFF && start < 0 && buf[i] === 0xD8) {
+                      start = i - 1;
+                    } else if (buf[i - 1] === 0xFF && start >= 0 && buf[i] === 0xD9) {
+                      show(buf.slice(start, i + 1));
+                      lastFrame = Date.now();
+                      status.hidden = true;
+                      buf = buf.slice(i + 1);
+                      start = -1;
+                      i = 1;
+                      continue;
+                    }
+                    i++;
+                  }
+                  if (start < 0) {
+                    buf = buf.slice(Math.max(0, buf.length - 1));
+                    scan = 1;
+                  } else {
+                    buf = buf.slice(start);
+                    start = 0;
+                    scan = buf.length;
+                  }
+                }
+              } finally {
+                clearInterval(watchdog);
+              }
+            }
+
+            async function run() {
+              for (;;) {
+                try { await play(); } catch (e) { }
+                status.textContent = 'Reconnecting…';
+                status.hidden = false;
+                await new Promise(function (done) { setTimeout(done, 2000); });
+              }
+            }
+            run();
+          })();
+          </script>
         </body>
         </html>
     """.trimIndent()
