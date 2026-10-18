@@ -15,12 +15,16 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import android.util.Size
+import android.view.OrientationEventListener
+import android.view.Surface
 import android.widget.Toast
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.Recorder
+import androidx.camera.video.VideoCapture
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -28,6 +32,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.abs
 
 /**
  * Foreground service that owns the camera and everything built on top of it:
@@ -48,6 +53,11 @@ class CameraService : LifecycleService() {
     @Volatile
     private var clipRecorder: ClipRecorder? = null
     private var recordingAvailable = false
+
+    private var imageAnalysis: ImageAnalysis? = null
+    private var videoCapture: VideoCapture<Recorder>? = null
+    private var deviceRotation = Surface.ROTATION_0
+    private var orientationListener: OrientationEventListener? = null
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
@@ -105,9 +115,30 @@ class CameraService : LifecycleService() {
         started = true
         isRunning = true
         startServer()
+        startOrientationListener()
         startCamera()
         startTicks()
         return START_STICKY
+    }
+
+    /**
+     * The service has no screen to follow, so the picture's orientation comes
+     * from the accelerometer: turning the phone turns the stream with it.
+     */
+    private fun startOrientationListener() {
+        val listener = object : OrientationEventListener(this) {
+            override fun onOrientationChanged(orientation: Int) {
+                val rotation = rotationFor(orientation, deviceRotation)
+                if (rotation == deviceRotation) return
+                deviceRotation = rotation
+                imageAnalysis?.targetRotation = rotation
+                videoCapture?.targetRotation = rotation // takes effect from the next clip
+            }
+        }
+        if (listener.canDetectOrientation()) {
+            listener.enable()
+            orientationListener = listener
+        }
     }
 
     private fun startServer() {
@@ -154,9 +185,11 @@ class CameraService : LifecycleService() {
                 .setResolutionSelector(resolutionSelector)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+                .setTargetRotation(deviceRotation)
                 .build()
 
             analysis.setAnalyzer(cameraExecutor) { image -> onFrame(image) }
+            imageAnalysis = analysis
 
             val selector = CameraSelector.Builder()
                 .requireLensFacing(settings.lensFacing)
@@ -168,10 +201,12 @@ class CameraService : LifecycleService() {
                 provider.unbindAll()
                 if (wantRecording) {
                     val recorder = ClipRecorder(this)
-                    val videoCapture = recorder.buildUseCase()
+                    val capture = recorder.buildUseCase()
+                    capture.targetRotation = deviceRotation
                     try {
-                        provider.bindToLifecycle(this, selector, analysis, videoCapture)
+                        provider.bindToLifecycle(this, selector, analysis, capture)
                         clipRecorder = recorder
+                        videoCapture = capture
                         recordingAvailable = true
                     } catch (e: Exception) {
                         // Device can't do stream + record together: keep the stream.
@@ -179,6 +214,7 @@ class CameraService : LifecycleService() {
                         provider.unbindAll()
                         provider.bindToLifecycle(this, selector, analysis)
                         clipRecorder = null
+                        videoCapture = null
                         recordingAvailable = false
                     }
                 } else {
@@ -329,6 +365,8 @@ class CameraService : LifecycleService() {
     override fun onDestroy() {
         isRunning = false
         main.removeCallbacksAndMessages(null)
+        orientationListener?.disable()
+        orientationListener = null
         runCatching { clipRecorder?.stop() }
         clipRecorder = null
         audioStreamer.stop()
@@ -362,6 +400,25 @@ class CameraService : LifecycleService() {
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, CameraService::class.java))
+        }
+
+        /**
+         * Maps the accelerometer angle (0..359, clockwise) to a Surface rotation.
+         * Within 15° of a 45° boundary the current rotation is kept, so a phone
+         * resting at an angle doesn't flip back and forth; lying flat keeps it too.
+         */
+        private fun rotationFor(orientation: Int, current: Int): Int {
+            if (orientation == OrientationEventListener.ORIENTATION_UNKNOWN) return current
+            val quadrant = ((orientation + 45) / 90) % 4
+            var offset = abs(orientation - quadrant * 90)
+            if (offset > 180) offset = 360 - offset
+            if (offset > 30) return current
+            return when (quadrant) {
+                1 -> Surface.ROTATION_270
+                2 -> Surface.ROTATION_180
+                3 -> Surface.ROTATION_90
+                else -> Surface.ROTATION_0
+            }
         }
 
         /** Start from a broadcast receiver, with no visible activity. */

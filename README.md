@@ -27,6 +27,10 @@ live audio playback.
 
 ### Camera app (`:app`)
 - 📹 Live video from the phone's front or back camera (CameraX).
+- 🔄 Follows the phone's orientation (accelerometer): mount it upright or
+  sideways and the picture stays the right way up — even with screen
+  auto‑rotate off. A clip already recording keeps its orientation; the next
+  one uses the new one.
 - 🏃 **Motion detection** with a push notification when movement is seen
   (adjustable sensitivity, 30 s notification cooldown).
 - 💾 **Recording to the phone**: *off*, *on motion* (a clip while something
@@ -132,6 +136,28 @@ For a phone that stays on as a camera, also:
    *Protect battery*, 85 %), turn it on — a phone charging 24/7 ages faster.
 
 The screen can stay **off**: the camera keeps running in the background.
+HomeCam runs as a foreground service and holds a wake lock, so the processor,
+camera and server stay awake with the screen off. In Android's deep sleep
+(*Doze*: unplugged, screen off, not moving) apps with a foreground service keep
+their network access and wake lock. Doze never starts while the phone is
+charging.
+
+### Check that it doesn't sleep
+
+Simple: turn the screen off, wait 30+ minutes, then open the viewer and move
+in front of the camera — the picture should react right away.
+
+Forcing deep sleep with `adb` (phone connected to the computer):
+
+```bash
+adb shell dumpsys deviceidle whitelist | grep homecam   # exempt from battery optimization?
+adb shell dumpsys battery unplug                        # pretend it's on battery
+# turn the phone's screen off, then:
+adb shell dumpsys deviceidle force-idle                 # enter deep sleep now
+# ...check the stream in the viewer for a few minutes, then restore:
+adb shell dumpsys deviceidle unforce
+adb shell dumpsys battery reset
+```
 
 Android limits: after an automatic start, **audio stays off until the app is
 opened once** on the camera phone (Android does not let apps start the
